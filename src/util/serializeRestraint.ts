@@ -1,4 +1,4 @@
-import { restraintObject } from "../restraint";
+import { restraintObject } from "./restraint";
 
 interface serializeRestraintOptions {
   prefix?: string;

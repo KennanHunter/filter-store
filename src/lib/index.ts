@@ -1,47 +1,87 @@
-import { RefinementCtx, z, ZodTypeAny } from "zod";
+import { z } from "zod";
 
-type Property<TSchema extends ZodTypeAny> = PropertyBehaviors<TSchema> & {
-  // ^?
-  schema: TSchema;
-};
+export type DefinedPrimitive = string | number | boolean | null;
 
-type DefinedPrimitive = string | number | boolean | null;
-type Stringify<T> = T extends DefinedPrimitive
+/**
+ * Recursively stringify type, keeping object shape and optional properties
+ */
+export type StringifyPrimitives<T> = T extends DefinedPrimitive
   ? string
   : {
       [K in keyof T]: T[K] extends (infer U)[]
-        ? Stringify<U>[]
-        : Stringify<T[K]>;
+        ? StringifyPrimitives<U>[]
+        : StringifyPrimitives<T[K]>;
     };
 
-export type PropertyBehaviors<T extends z.ZodTypeAny> = {
-  default?: z.infer<T>;
-  hidden: boolean;
-  toChip?: (arg: z.infer<T>, ctx: RefinementCtx) => String | String[] | void;
+export type PropertyBehaviors<T> = {
+  default: T | undefined;
+  hidden?: boolean;
+  toChip?: (arg: T, ctx: z.RefinementCtx) => String | String[] | void;
   deserialize: (
-    serializedForm: Stringify<z.infer<T>>,
-    ctx: RefinementCtx
-  ) => z.infer<T>;
+    serializedForm: StringifyPrimitives<T>,
+    ctx: z.RefinementCtx
+  ) => T;
+  serialize: (
+    serializedForm: T,
+    ctx: z.RefinementCtx
+  ) => StringifyPrimitives<T>;
 };
 
-const GenerateProperty =
-  <TSchema extends z.ZodTypeAny>(schema: TSchema) =>
-  (options: PropertyBehaviors<TSchema>): Property<TSchema> => ({
-    schema,
-    ...options,
-  });
+/**
+ * Final datatype for all of our properties
+ */
+type Property<T, ZodSchema extends z.Schema<T>> = PropertyBehaviors<T> & {
+  schema: ZodSchema;
+};
+type PropertyWithKey<T, ZodSchema extends z.Schema<T>> = Property<
+  T,
+  ZodSchema
+> & {
+  key: string;
+};
+type UnknownPropertyWithKey = PropertyWithKey<unknown, z.Schema<unknown>>;
 
-type CreateFilterStoreState = { [k: string]: Property<z.ZodUnknown> };
+/**
+ * Provides typing to all of our Property Behaviors
+ */
+type GeneratorFunction = <TypeSchema>(
+  schema: z.Schema<TypeSchema>
+) => (
+  behaviors: PropertyBehaviors<TypeSchema>
+) => Property<TypeSchema, z.Schema<TypeSchema>>;
 
-export const createFilterStore = <T extends CreateFilterStoreState>(
-  createFilterStoreState: (generateProperty: typeof GenerateProperty) => T
-): ((func: (state: T) => string) => string) => {
-  const filterStoreState = createFilterStoreState(GenerateProperty);
-  const filterStoreStateEntries = Object.entries(filterStoreState);
+const generatorFunction: GeneratorFunction = (schema) => (behaviors) => ({
+  schema,
+  ...behaviors,
+});
 
-  const defaultState = filterStoreStateEntries.forEach(
-    ([key, value]) => value.default
-  );
+/**
+ * Redefines object with values user didn't provide
+ * @param val
+ * @returns
+ */
+const setDefaultValues = (
+  val: UnknownPropertyWithKey
+): Required<UnknownPropertyWithKey> => ({
+  ...val,
+  default: val.default ?? undefined,
+  hidden: val.hidden ?? true,
+  toChip:
+    val.toChip ??
+    ((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg))),
+});
 
-  return (func) => func(filterStoreState);
+export const newFilterStore = <T>(
+  filterStoreConfig: (generatorFunction: GeneratorFunction) => {
+    [k in keyof T]: PropertyBehaviors<T[k]>;
+  }
+) => {
+  const _config = filterStoreConfig(generatorFunction);
+  const values = Object.entries(_config)
+    .map(
+      ([key, value]) => ({ ...(value as any), key } as UnknownPropertyWithKey)
+    )
+    .map(setDefaultValues);
+
+  return { _config };
 };
