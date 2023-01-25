@@ -8,7 +8,7 @@ interface serializeRestraintOptions {
 
 export function serializeRestraint(
   restraint: restraintObject,
-  options: serializeRestraintOptions = { localize: true }
+  options: serializeRestraintOptions = {}
 ): string | undefined {
   const { prefix, postfix } = options;
 

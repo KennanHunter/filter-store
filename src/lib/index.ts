@@ -1,39 +1,47 @@
-import { RefinementCtx, z } from "zod";
-import create from "zustand";
+import { RefinementCtx, z, ZodTypeAny } from "zod";
 
-type State<T extends z.ZodTypeAny> = {
-  key: string;
-  type: T;
+type Property<TSchema extends ZodTypeAny> = PropertyBehaviors<TSchema> & {
+  // ^?
+  schema: TSchema;
+};
+
+type DefinedPrimitive = string | number | boolean | null;
+type Stringify<T> = T extends DefinedPrimitive
+  ? string
+  : {
+      [K in keyof T]: T[K] extends (infer U)[]
+        ? Stringify<U>[]
+        : Stringify<T[K]>;
+    };
+
+export type PropertyBehaviors<T extends z.ZodTypeAny> = {
+  default?: z.infer<T>;
   hidden: boolean;
   toChip?: (arg: z.infer<T>, ctx: RefinementCtx) => String | String[] | void;
+  deserialize: (
+    serializedForm: Stringify<z.infer<T>>,
+    ctx: RefinementCtx
+  ) => z.infer<T>;
 };
 
-type StateToObject<T extends State<z.ZodTypeAny>> = {
-  [Name in T["key"]]: Omit<State<z.ZodTypeAny>, "key">;
+const GenerateProperty =
+  <TSchema extends z.ZodTypeAny>(schema: TSchema) =>
+  (options: PropertyBehaviors<TSchema>): Property<TSchema> => ({
+    schema,
+    ...options,
+  });
+
+type CreateFilterStoreState = { [k: string]: Property<z.ZodUnknown> };
+
+export const createFilterStore = <T extends CreateFilterStoreState>(
+  createFilterStoreState: (generateProperty: typeof GenerateProperty) => T
+): ((func: (state: T) => string) => string) => {
+  const filterStoreState = createFilterStoreState(GenerateProperty);
+  const filterStoreStateEntries = Object.entries(filterStoreState);
+
+  const defaultState = filterStoreStateEntries.forEach(
+    ([key, value]) => value.default
+  );
+
+  return (func) => func(filterStoreState);
 };
-
-type StateArray = State<z.ZodTypeAny>[];
-
-
-export class FilterStore<T extends z.ZodTypeAny> {
-  constructor(state: State<T>[]) {
-    return this;
-  }
-
-  state: State<T>[] = [];
-
-  addData<U extends z.ZodTypeAny>(options: State<U>) {
-    this.state.push(options);
-
-    return new FilterStore(this.state);
-  }
-
-  addSideEffect() {
-    return new FilterStore(this.state);
-  }
-
-  build = () =>
-    create<{}>()((set) => ({
-      bears: 0,
-    }));
-}
