@@ -11,6 +11,5 @@ newFilterStore((item) => ({
   }),
   complex: item(restraintObject())({
     default: {},
-    deserialize: (arg) => "",
   }),
-}));
+})).getState().state;

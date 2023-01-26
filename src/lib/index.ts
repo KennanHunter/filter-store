@@ -1,4 +1,6 @@
+import qs from "qs";
 import { z } from "zod";
+import create from "zustand";
 
 export type DefinedPrimitive = string | number | boolean | null;
 
@@ -14,17 +16,11 @@ export type StringifyPrimitives<T> = T extends DefinedPrimitive
     };
 
 export type PropertyBehaviors<T> = {
-  default: T | undefined;
+  default?: T;
   hidden?: boolean;
-  toChip?: (arg: T, ctx: z.RefinementCtx) => String | String[] | void;
-  deserialize: (
-    serializedForm: StringifyPrimitives<T>,
-    ctx: z.RefinementCtx
-  ) => T;
-  serialize: (
-    serializedForm: T,
-    ctx: z.RefinementCtx
-  ) => StringifyPrimitives<T>;
+  toChip?: (arg: T) => String | String[] | void;
+  deserialize?: (serializedForm: StringifyPrimitives<T>) => T;
+  serialize?: (serializedForm: T) => StringifyPrimitives<T>;
 };
 
 /**
@@ -69,11 +65,13 @@ const setDefaultValues = (
   toChip:
     val.toChip ??
     ((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg))),
+  deserialize: (serializedForm) => qs.parse(serializedForm),
+  serialize: (raw) => raw as any,
 });
 
 export const newFilterStore = <T>(
   filterStoreConfig: (generatorFunction: GeneratorFunction) => {
-    [k in keyof T]: PropertyBehaviors<T[k]>;
+    [k in keyof T]: Property<T[k], z.Schema<T[k]>>;
   }
 ) => {
   const _config = filterStoreConfig(generatorFunction);
@@ -83,5 +81,31 @@ export const newFilterStore = <T>(
     )
     .map(setDefaultValues);
 
-  return { _config };
+  type State = {
+    [k in keyof T]: z.infer<Property<T[k], z.Schema<T[k]>>["schema"]>;
+  };
+
+  type DefaultState = { [k in keyof T]: PropertyBehaviors<T[k]>["default"] };
+  const defaultState: DefaultState = Object.fromEntries(
+    values.map((val) => [val.key, val.default])
+  ) as any;
+
+  return create<{
+    deserialize: (serializedString: string) => void;
+    state: State;
+  }>()((set) => ({
+    state: defaultState as State,
+    deserialize: (serializedString: string) => {
+      const deserializedByQueryString = qs.parse(serializedString);
+
+      for (const i in deserializedByQueryString) {
+        const deserializedByQueryStringValue = deserializedByQueryString[i];
+        if (!deserializedByQueryStringValue) continue;
+
+        const deserializedForm = values
+          .find((val) => val.key === i)
+          ?.deserialize(deserializedByQueryStringValue);
+      }
+    },
+  }));
 };
