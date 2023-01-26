@@ -84,17 +84,22 @@ export const newFilterStore = <T>(
   type State = {
     [k in keyof T]: z.infer<Property<T[k], z.Schema<T[k]>>["schema"]>;
   };
+  type Key = keyof T extends string ? keyof T : never;
 
-  type DefaultState = { [k in keyof T]: PropertyBehaviors<T[k]>["default"] };
-  const defaultState: DefaultState = Object.fromEntries(
+  const _keys: Key[] = values.map((val) => val.key) as any;
+  const defaultState = Object.fromEntries(
     values.map((val) => [val.key, val.default])
-  ) as any;
+  ) as State;
 
   return create<{
+    _config: typeof _config;
+    _keys: Key[];
     deserialize: (serializedString: string) => void;
     state: State;
   }>()((set) => ({
-    state: defaultState as State,
+    _config,
+    _keys,
+    state: defaultState,
     deserialize: (serializedString: string) => {
       const deserializedByQueryString = qs.parse(serializedString);
 
@@ -105,6 +110,9 @@ export const newFilterStore = <T>(
         const deserializedForm = values
           .find((val) => val.key === i)
           ?.deserialize(deserializedByQueryStringValue);
+
+        // @ts-ignore
+        set({ state: { [i]: deserializedForm } });
       }
     },
   }));

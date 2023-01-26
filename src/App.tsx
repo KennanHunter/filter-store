@@ -4,7 +4,8 @@ import { Prism } from "@mantine/prism";
 import { useFilterStore } from "./stores/filter";
 
 export default function App() {
-  const store = useFilterStore();
+  const state = useFilterStore((store) => store.state);
+  //     ^?
 
   return (
     <MantineProvider
@@ -16,7 +17,7 @@ export default function App() {
         <SimpleGrid cols={2}>
           <Paper p={"md"} withBorder>
             <Text>Store data</Text>
-            <Prism language="json">{JSON.stringify(store, undefined, 2)}</Prism>
+            <Prism language="json">{JSON.stringify(state, undefined, 2)}</Prism>
           </Paper>
         </SimpleGrid>
       </Box>

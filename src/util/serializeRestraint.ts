@@ -6,7 +6,7 @@ interface serializeRestraintOptions {
   localize?: boolean;
 }
 
-export function serializeRestraint(
+export function convertRestraintToChip(
   restraint: restraintObject,
   options: serializeRestraintOptions = {}
 ): string | undefined {
