@@ -65,13 +65,16 @@ const setDefaultValues = (
   toChip:
     val.toChip ??
     ((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg))),
-  deserialize: (serializedForm) => qs.parse(serializedForm),
-  serialize: (raw) => raw as any,
+  deserialize: val.deserialize ?? ((serializedForm) => serializedForm),
+  serialize: val.serialize ?? ((raw) => raw as any),
 });
 
-export const newFilterStore = <T>(
+export const newFilterStore = <FilterStoreType>(
   filterStoreConfig: (generatorFunction: GeneratorFunction) => {
-    [k in keyof T]: Property<T[k], z.Schema<T[k]>>;
+    [k in keyof FilterStoreType]: Property<
+      FilterStoreType[k],
+      z.Schema<FilterStoreType[k]>
+    >;
   }
 ) => {
   const _config = filterStoreConfig(generatorFunction);
@@ -82,9 +85,13 @@ export const newFilterStore = <T>(
     .map(setDefaultValues);
 
   type State = {
-    [k in keyof T]: z.infer<Property<T[k], z.Schema<T[k]>>["schema"]>;
+    [k in keyof FilterStoreType]: z.infer<
+      Property<FilterStoreType[k], z.Schema<FilterStoreType[k]>>["schema"]
+    >;
   };
-  type Key = keyof T extends string ? keyof T : never;
+  type Key = keyof FilterStoreType extends string
+    ? keyof FilterStoreType
+    : never;
 
   const _keys: Key[] = values.map((val) => val.key) as any;
   const defaultState = Object.fromEntries(
@@ -95,11 +102,14 @@ export const newFilterStore = <T>(
     _config: typeof _config;
     _keys: Key[];
     deserialize: (serializedString: string) => void;
+    serialize: () => string;
     state: State;
-  }>()((set) => ({
+    set: <TKey extends Key>(key: TKey) => (newValue: State[TKey]) => void;
+  }>()((set, get) => ({
     _config,
     _keys,
     state: defaultState,
+    set: (key) => (newValue) => set({ state: { [key]: newValue } } as any),
     deserialize: (serializedString: string) => {
       const deserializedByQueryString = qs.parse(serializedString);
 
@@ -115,5 +125,18 @@ export const newFilterStore = <T>(
         set({ state: { [i]: deserializedForm } });
       }
     },
+    serialize: () => {
+      const store = get();
+      const stringifiedState = store._keys.map((key) => {
+        return (
+          store._config[key] as unknown as Required<
+            Property<unknown, z.Schema<unknown>>
+          >
+        ).serialize(store.state[key]);
+      });
+
+      return qs.stringify(stringifiedState);
+    },
+    toChips: () => {},
   }));
 };
