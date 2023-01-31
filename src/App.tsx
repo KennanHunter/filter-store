@@ -8,20 +8,10 @@ import {
   TextInput,
 } from "@mantine/core";
 import { Prism } from "@mantine/prism";
-import { useEffect, useState } from "react";
-
-import { useFilterStore } from "./stores/filter";
+import { useSearch } from "./lib/useSearch";
 
 export default function App() {
-  const state = useFilterStore((store) => store.state);
-  const setSimple = useFilterStore((store) => store.set("simple"));
-  //     ^?
-  const stringify = useFilterStore((store) => store.serialize);
-
-  const [stringifyResult, setStringifyResult] = useState<string>();
-  useEffect(() => {
-    setStringifyResult(stringify());
-  });
+  const { state, set } = useSearch();
 
   return (
     <MantineProvider
@@ -36,15 +26,19 @@ export default function App() {
             <Prism language="json">{JSON.stringify(state, undefined, 2)}</Prism>
           </Paper>
           <Paper p="md" withBorder>
-            <Text>Set Simple State</Text>
+            <Text>Set Complex State</Text>
             <TextInput
-              value={state.simple}
-              onChange={(event) => setSimple(event.currentTarget.value)}
+              value={state.complex.start}
+              onChange={(event) =>
+                set("complex")({
+                  start: event.currentTarget.value ? Number.parseInt(event.currentTarget.value) : undefined,
+                })
+              }
             />
           </Paper>
           <Paper p="md" withBorder>
             <Text>Stringified</Text>
-            <Code block>{stringifyResult}</Code>
+            {/* <Code block>{stringifyResult}</Code> */}
           </Paper>
         </SimpleGrid>
       </Box>
